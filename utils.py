@@ -242,3 +242,48 @@ def init_distributed_mode(args):
                                          world_size=args.world_size, rank=args.rank)
     torch.distributed.barrier()
     setup_for_distributed(args.rank == 0)
+
+
+
+def gs_cal(task_id, x, y, criterion, model, batch_size=16):
+    # Init
+    param_R = {}
+    
+    for name, param in model.named_parameters():
+        if len(param.size()) <= 1:
+            continue
+        name = name.split('.')[:-1]
+        name = '.'.join(name)
+        param = param.view(param.size(0), -1)
+        param_R['{}'.format(name)]=torch.zeros((param.size(0)))
+    
+    # Compute
+    model.train()
+
+    for i in range(0,x.size(0),batch_size):
+        b=torch.LongTensor(np.arange(i,np.min([i+batch_size,x.size(0)]))).cuda()
+        images=x[b]
+        target=y[b]
+
+        # Forward and backward
+        outputs = model.forward(images, True)[t]
+        cnt = 0
+        
+        for idx, j in enumerate(model.act):
+            j = torch.mean(j, dim=0)
+            if len(j.size())>1:
+                j = torch.mean(j.view(j.size(0), -1), dim = 1).abs()
+            model.act[idx] = j
+            
+        for name, param in model.named_parameters():
+            if len(param.size()) <= 1 or 'last' in name or 'downsample' in name:
+                continue
+            name = name.split('.')[:-1]
+            name = '.'.join(name)
+            param_R[name] += model.act[cnt].abs().detach()*sbatch
+            cnt+=1 
+
+    with torch.no_grad():
+        for key in param_R.keys():
+            param_R[key]=(param_R[key]/x.size(0))
+    return param_R

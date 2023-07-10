@@ -277,10 +277,10 @@ def train_task_model(task_model: torch.nn.Module, device, gm_list, epochs, task_
 
     #training_data = [[] for e_id in range(epochs)]
     data_loader_data = []
-    lr = 0.8e-3
+    lr = 7e-3
     loss_fn = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(task_model.parameters(), lr=lr)
-    scheduler = lr_scheduler.LinearLR(optimizer, start_factor=1.0, end_factor=0.001, total_iters=90)
+    scheduler = lr_scheduler.LinearLR(optimizer, start_factor=1.0, end_factor=0.05, total_iters=90)
 
     gm_use = gm_list[:10*(task_id+1)]
     input_train = []
@@ -407,13 +407,14 @@ def train_simple_model(model: torch.nn.Module,
         metric_logger.meters['Acc@1'].update(acc1.item(), n=input.shape[0])
         metric_logger.meters['Acc@5'].update(acc5.item(), n=input.shape[0])
 
-        # if task_id > 0:
-        #     for (name, param) in model.named_parameters():
-        #         if 'head' in name:
-        #             key = name.split('.')[0]
-        #             param.data = param.data*freeze[key]
-            
-    #proxy_grad_descent(model, model_old,)
+        #ags-cl
+        if task_id > 0:
+            for (name, param) in model.named_parameters():
+                if 'head' in name:
+                    key = name.split('.')[0]
+                    param.data = param.data*freeze[key]
+    #ags-cl        
+    proxy_grad_descent(model, model_old,)
         
     # gather the stats from all processes
     metric_logger.synchronize_between_processes()
@@ -676,7 +677,7 @@ def train_and_evaluate_new(model: torch.nn.Module, original_model: torch.nn.Modu
 
 
 @torch.no_grad()
-def proxy_grad_descent(model: torch.nn.Module, model_old: torch.nn.Module):
+def proxy_grad_descent(model: torch.nn.Module, model_old: torch.nn.Module, task_id):
 
     lr = 0.001
     mu = 10
@@ -716,3 +717,37 @@ def proxy_grad_descent(model: torch.nn.Module, model_old: torch.nn.Module):
 
                 penalty_weight = 0
                 penalty_bias = 0
+
+                if task_id>0:
+                    if len(weight.size()) > 2:
+                        norm = (weight - weight_old).norm(2, dim=(1,2,3))
+                    else:
+                        norm = (weight - weight_old).norm(2, dim=(1))
+
+                    norm = (norm**2 + (bias-bias_old)**2).pow(1/2)
+
+                    aux = F.threshold(norm - self.omega[key]*self.lamb*lr, 0, 0, False)
+                    boonmo = lr*self.lamb*self.omega[key] + aux
+                    alpha = (aux / boonmo)
+                    alpha[alpha!=alpha] = 1
+
+                    coeff_alpha = alpha * self.mask[key]
+                    coeff_beta = (1-alpha) * self.mask[key]
+
+
+                    if len(weight.size()) > 2:
+                        penalty_weight = coeff_alpha.unsqueeze(-1).unsqueeze(-1).unsqueeze(-1)*weight.data + \
+                                            coeff_beta.unsqueeze(-1).unsqueeze(-1).unsqueeze(-1)*weight_old.data
+                    else:
+                        penalty_weight = coeff_alpha.unsqueeze(-1)*weight.data + coeff_beta.unsqueeze(-1)*weight_old.data
+                    penalty_bias = coeff_alpha*bias.data + coeff_beta*bias_old.data
+
+                diff_weight = (sparse_weight + penalty_weight) - weight.data
+                diff_bias = sparse_bias + penalty_bias - bias.data
+                
+
+                weight.data = sparse_weight + penalty_weight
+                bias.data = sparse_bias + penalty_bias
+
+    
+    return
