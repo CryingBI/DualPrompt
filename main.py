@@ -92,6 +92,14 @@ def main(args):
     task_model.to(device)  
 
     gm_list = []
+    model_old = model
+    mask = {}
+    omega = None 
+    for (name, p) in model.named_parameters():
+        if 'head' in name:
+            name = name.split('.')[:-1]
+            name = '.'.join(name)
+            mask[name] = torch.zeros(p.shape[0])
 
     if args.freeze:
         # all parameters are frozen for original vit model
@@ -148,9 +156,9 @@ def main(args):
     print(f"Start training for {args.epochs} epochs")
     start_time = time.time()
 
-    train_and_evaluate_new(model, original_model, task_model,
+    train_and_evaluate_new(model, original_model, task_model, model_old,
                     criterion, data_loader, dataloader_each_class, optimizer, lr_scheduler, gm_list,
-                    device, class_mask, args)
+                    device, class_mask, args, mask, omega)
 
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))

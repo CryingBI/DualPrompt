@@ -355,10 +355,10 @@ def train_task_model(task_model: torch.nn.Module, device, gm_list, epochs, task_
     for e_id in range(epochs):
         train_data(data_loader_data[e_id], scheduler, e_id)
 
-def train_simple_model(model: torch.nn.Module, 
+def train_simple_model(model: torch.nn.Module, model_old: torch.nn.Module,
                     criterion, data_loader: Iterable, optimizer: torch.optim.Optimizer,
-                    device: torch.device, epoch: int, max_norm: float = 0,
-                    set_training_mode=True, task_id=-1, class_mask=None, args = None,):
+                    device: torch.device, epoch: int, args, mask, omega, max_norm: float = 0,
+                    set_training_mode=True, task_id=-1, ):
     
     freeze = {}
 
@@ -378,13 +378,6 @@ def train_simple_model(model: torch.nn.Module,
 
         output = model(input, task_infer=None, task_id=task_id, train=set_training_mode)
         logits = output['logits']
-
-        # here is the trick to mask out classes of non-current tasks
-        if args.train_mask and class_mask is not None:
-            mask = class_mask[task_id]
-            not_mask = np.setdiff1d(np.arange(args.nb_classes), mask)
-            not_mask = torch.tensor(not_mask, dtype=torch.int64).to(device)
-            logits = logits.index_fill(dim=1, index=not_mask, value=float('-inf'))
 
         loss = criterion(logits, target) # base criterion (CrossEntropyLoss)
         # if args.pull_constraint and 'reduce_sim' in output:
@@ -414,7 +407,7 @@ def train_simple_model(model: torch.nn.Module,
                     key = name.split('.')[0]
                     param.data = param.data*freeze[key]
     #ags-cl        
-    proxy_grad_descent(model, model_old,)
+    proxy_grad_descent(model, model_old, task_id, args, mask, omega)
         
     # gather the stats from all processes
     metric_logger.synchronize_between_processes()
@@ -577,9 +570,9 @@ def evaluate_till_now_new(model: torch.nn.Module, original_model: torch.nn.Modul
     print(result_str)
 
     return test_stats
-def train_and_evaluate_new(model: torch.nn.Module, original_model: torch.nn.Module, task_model, 
+def train_and_evaluate_new(model: torch.nn.Module, original_model: torch.nn.Module, task_model, model_old: torch.nn.Module, 
                     criterion, data_loader: Iterable, dataloader_each_class: Iterable, optimizer: torch.optim.Optimizer, lr_scheduler, gm_list, device: torch.device, 
-                    class_mask=None, args = None,):
+                    class_mask, args, mask, omega,):
     
     # create matrix to save end-of-task accuracies 
     acc_matrix = np.zeros((args.num_tasks, args.num_tasks))
@@ -630,15 +623,14 @@ def train_and_evaluate_new(model: torch.nn.Module, original_model: torch.nn.Modu
         
         sample_data(original_model=original_model, dataloader_each_class=dataloader_each_class[task_id]['train_each_class'], gm_list=gm_list, device=device, task_id=task_id, args=args)
 
-        # for epoch in range(args.epochs):
+        for epoch in range(args.epochs):
             
-        #     train_simple_stat = train_simple_model(model=model, criterion=criterion,
-        #                                     data_loader=data_loader[task_id]['train'], optimizer=optimizer,
-        #                                     device=device, epoch=epoch, max_norm = args.clip_grad,
-        #                                     set_training_mode=True, task_id=task_id, class_mask=class_mask,
-        #                                     args=args)
-        #     if lr_scheduler:
-        #         lr_scheduler.step(epoch)
+            train_simple_stat = train_simple_model(model=model, criterion=criterion, model_old=model_old,
+                                            data_loader=data_loader[task_id]['train'], optimizer=optimizer,
+                                            device=device, epoch=epoch, args=args, mask=mask, omega=omega, 
+                                            max_norm = args.clip_grad, set_training_mode=True, task_id=task_id)
+            if lr_scheduler:
+                lr_scheduler.step(epoch)
         train_task_model(task_model=task_model, device=device, gm_list=gm_list, epochs=90, task_id=task_id)
 
         test_stat = evaluate_till_now_new(model=model, original_model=original_model, task_model=task_model, data_loader=data_loader, device=device,
@@ -651,7 +643,7 @@ def train_and_evaluate_new(model: torch.nn.Module, original_model: torch.nn.Modu
             state_dict = {
                     'model': model.state_dict(),
                     'optimizer': optimizer.state_dict(),
-                    #'epoch': epoch,
+                    'epoch': epoch,
                     'args': args,
                 }
             if args.sched is not None and args.sched != 'constant':
@@ -659,36 +651,28 @@ def train_and_evaluate_new(model: torch.nn.Module, original_model: torch.nn.Modu
             
             utils.save_on_master(state_dict, checkpoint_path)
 
-        # log_stats = {**{f'train_{k}': v for k, v in train_simple_stat.items()},
-        #     **{f'test_{k}': v for k, v in test_stat.items()},
-        #     'epoch': epoch,}
+        log_stats = {**{f'train_{k}': v for k, v in train_simple_stat.items()},
+            **{f'test_{k}': v for k, v in test_stat.items()},
+            'epoch': epoch,}
 
-        # if args.output_dir and utils.is_main_process():
-        #     with open(os.path.join(args.output_dir, '{}_stats.txt'.format(datetime.datetime.now().strftime('log_%Y_%m_%d_%H_%M'))), 'a') as f:
-        #         f.write(json.dumps(log_stats) + '\n')
+        if args.output_dir and utils.is_main_process():
+            with open(os.path.join(args.output_dir, '{}_stats.txt'.format(datetime.datetime.now().strftime('log_%Y_%m_%d_%H_%M'))), 'a') as f:
+                f.write(json.dumps(log_stats) + '\n')
         
-        #store old head model use ags-cl
-        # head_old = deepcopy(model.head)
-        # head_old.train()
-        # for param in head_old.parameters():
+        # #store old model use ags-cl
+        # model_old = deepcopy(model)
+        # model_old.train()
+        # for param in model_old.parameters():
         #     param.requires_grad = False
 
 
-
-
 @torch.no_grad()
-def proxy_grad_descent(model: torch.nn.Module, model_old: torch.nn.Module, task_id):
+def proxy_grad_descent(model: torch.nn.Module, model_old: torch.nn.Module, task_id, args, mask, omega):
 
-    lr = 0.001
-    mu = 10
-    mask = {}
+    lr = args.lr
+    mu = 0
+    lamb = 1
 
-    for (name,p) in model.named_parameters():
-        if 'head' in name:
-            name = name.split('.')[:-1]
-            name = '.'.join(name)
-            mask[name] = torch.zeros(p.shape[0])
-    
     with torch.no_grad():
         for (name,module),(_,module_old) in zip(model.named_children(), model_old.named_children()):
             if 'head' in name:
@@ -726,13 +710,13 @@ def proxy_grad_descent(model: torch.nn.Module, model_old: torch.nn.Module, task_
 
                     norm = (norm**2 + (bias-bias_old)**2).pow(1/2)
 
-                    aux = F.threshold(norm - self.omega[key]*self.lamb*lr, 0, 0, False)
-                    boonmo = lr*self.lamb*self.omega[key] + aux
+                    aux = F.threshold(norm - omega[key]*lamb*lr, 0, 0, False)
+                    boonmo = lr*lamb*omega[key] + aux
                     alpha = (aux / boonmo)
                     alpha[alpha!=alpha] = 1
 
-                    coeff_alpha = alpha * self.mask[key]
-                    coeff_beta = (1-alpha) * self.mask[key]
+                    coeff_alpha = alpha * mask[key]
+                    coeff_beta = (1-alpha) * mask[key]
 
 
                     if len(weight.size()) > 2:
@@ -745,9 +729,7 @@ def proxy_grad_descent(model: torch.nn.Module, model_old: torch.nn.Module, task_
                 diff_weight = (sparse_weight + penalty_weight) - weight.data
                 diff_bias = sparse_bias + penalty_bias - bias.data
                 
-
                 weight.data = sparse_weight + penalty_weight
                 bias.data = sparse_bias + penalty_bias
-
-    
+                
     return
