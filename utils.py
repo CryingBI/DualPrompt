@@ -271,10 +271,10 @@ def gs_cal(task_id, data_loader, model, device):
             model.act[idx] = j
             
         for name, param in model.named_parameters():
-            if 'ln' or 'last' in name and len(param.size()) > 1:
+            if ('ln' or 'last') in name and len(param.size()) > 1:
                 name = name.split('.')[:-1]
                 name = '.'.join(name)
-                print(param_R)
+                print(name)
                 param_R[name] += model.act[cnt].abs().detach()*(input.shape)
                 cnt+=1 
 
