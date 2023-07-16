@@ -250,11 +250,11 @@ def gs_cal(task_id, data_loader, model, device):
     param_R = {}
     
     for name, param in model.named_parameters():
-        if ('ln' or 'last') in name and len(param.size()) > 1:
+        if 'ln'in name and len(param.size()) > 1:
             name = name.split('.')[:-1]
             name = '.'.join(name)
             param = param.view(param.size(0), -1)
-            param_R['{}'.format(name)]=torch.zeros((param.size(0)))
+            param_R['{}'.format(name)]=torch.zeros((param.size(0))).to(device)
     print(len(param_R))
     # Compute
     model.train()
@@ -271,10 +271,10 @@ def gs_cal(task_id, data_loader, model, device):
             model.act[idx] = j
             
         for name, param in model.named_parameters():
-            if ('ln' or 'last') in name and len(param.size()) > 1:
+            if 'ln' in name and len(param.size()) > 1:
                 name = name.split('.')[:-1]
                 name = '.'.join(name)
-                param_R[name] += model.act[cnt].abs().detach().to("cuda:0")*input.shape[0]
+                param_R[name] += model.act[cnt].abs().detach().to(device)*input.shape[0]
                 cnt+=1
                 print("oke") 
 
