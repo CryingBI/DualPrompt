@@ -693,7 +693,7 @@ def train_and_evaluate_new(model: torch.nn.Module, original_model: torch.nn.Modu
                     mask = (omega[name]==0).float().unsqueeze(-1)
 
                     zero_cnt = int((mask.sum()).item())
-                    indice = np.random.choice(range(zero_cnt), int(zero_cnt*(1-args.rho)), replace=False).to(device)
+                    indice = np.random.choice(range(zero_cnt), int(zero_cnt*(1-args.rho)), replace=False)
                     indice = torch.tensor(indice).long().to(device)
                     idx = (torch.arange(weight.shape[0])[mask.flatten(0)==1][indice]).to(device)
                     mask[idx] = 0
