@@ -245,7 +245,7 @@ def init_distributed_mode(args):
 
 
 
-def gs_cal(task_id, x, y, criterion, model, batch_size=16):
+def gs_cal(task_id, data_loader, model, device):
     # Init
     param_R = {}
     
@@ -260,30 +260,25 @@ def gs_cal(task_id, x, y, criterion, model, batch_size=16):
     # Compute
     model.train()
 
-    for i in range(0,x.size(0),batch_size):
-        b=torch.LongTensor(np.arange(i,np.min([i+batch_size,x.size(0)]))).cuda()
-        images=x[b]
-        target=y[b]
+    for batch, (input, target) in enumerate(data_loader):
+        input = input.to(device, non_blocking=True)
+        #target = target.to(device, non_blocking=True)
 
-        # Forward and backward
-        outputs = model.forward(images, True)[t]
+        output = model(input, avg_act = True,task_infer=None, task_id=task_id, train=True)
         cnt = 0
         
         for idx, j in enumerate(model.act):
             j = torch.mean(j, dim=0)
-            if len(j.size())>1:
-                j = torch.mean(j.view(j.size(0), -1), dim = 1).abs()
             model.act[idx] = j
             
         for name, param in model.named_parameters():
-            if len(param.size()) <= 1 or 'last' in name or 'downsample' in name:
-                continue
-            name = name.split('.')[:-1]
-            name = '.'.join(name)
-            param_R[name] += model.act[cnt].abs().detach()*sbatch
-            cnt+=1 
+            if 'ln1' in name:
+                name = name.split('.')[:-1]
+                name = '.'.join(name)
+                param_R[name] += model.act[cnt].abs().detach()*(input.shape)
+                cnt+=1 
 
     with torch.no_grad():
         for key in param_R.keys():
-            param_R[key]=(param_R[key]/x.size(0))
+            param_R[key]=(param_R[key]/(len(data_loader.dataset)))
     return param_R

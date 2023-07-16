@@ -23,6 +23,8 @@ import numpy as np
 
 from timm.utils import accuracy
 from timm.optim import create_optimizer
+from timm.models import create_model
+
 from sklearn.mixture import GaussianMixture
 from sklearn.decomposition import PCA
 from torch.utils.data import DataLoader, TensorDataset
@@ -403,7 +405,7 @@ def train_simple_model(model: torch.nn.Module, model_old: torch.nn.Module,
         #ags-cl
         if task_id > 0:
             for (name, param) in model.named_parameters():
-                if 'head' in name:
+                if ('ln' or 'last') in name:
                     key = name.split('.')[0]
                     param.data = param.data*freeze[key]
     #ags-cl        
@@ -573,48 +575,48 @@ def evaluate_till_now_new(model: torch.nn.Module, original_model: torch.nn.Modul
 def train_and_evaluate_new(model: torch.nn.Module, original_model: torch.nn.Module, task_model, model_old: torch.nn.Module, 
                     criterion, data_loader: Iterable, dataloader_each_class: Iterable, optimizer: torch.optim.Optimizer, lr_scheduler, gm_list, device: torch.device, 
                     class_mask, args, mask, omega,):
-    
+
     # create matrix to save end-of-task accuracies 
     acc_matrix = np.zeros((args.num_tasks, args.num_tasks))
 
     for task_id in range(args.num_tasks):
 
         #ags-cl
-        # if task_id > 0:
-        #     freeze = {}
-        #     omega = None
-        #     for name, param in model.named_parameters():
-        #         if 'head' in name:
-        #             key = name.split('.')[0]
+        if task_id > 0:
+            freeze = {}
+            omega = None
+            for name, param in model.named_parameters():
+                if ('ln' or 'last') in name:
+                    key = name.split('.')[0]
                     
-        #             temp = torch.ones_like(param)
-        #             temp = temp.reshape((temp.size(0), omega[prekey].size(0) , -1))
-        #             temp[:, omega[prekey] == 0] = 0
-        #             temp[omega[key] == 0] = 1
-        #             freeze[key] = temp.reshape(param.shape)
-        #         else:
-        #             continue
+                    temp = torch.ones_like(param)
+                    temp = temp.reshape((temp.size(0), omega[prekey].size(0) , -1))
+                    temp[:, omega[prekey] == 0] = 0
+                    temp[omega[key] == 0] = 1
+                    freeze[key] = temp.reshape(param.shape)
+                else:
+                    continue
 
-        #         prekey = key
+                prekey = key
         # Transfer previous learned prompt params to the new prompt
-        # if args.prompt_pool and args.shared_prompt_pool:
-        #     if task_id > 0:
-        #         prev_start = (task_id - 1) * args.top_k
-        #         prev_end = task_id * args.top_k
+        if args.prompt_pool and args.shared_prompt_pool:
+            if task_id > 0:
+                prev_start = (task_id - 1) * args.top_k
+                prev_end = task_id * args.top_k
 
-        #         cur_start = prev_end
-        #         cur_end = (task_id + 1) * args.top_k
+                cur_start = prev_end
+                cur_end = (task_id + 1) * args.top_k
 
-        #         if (prev_end > args.size) or (cur_end > args.size):
-        #             pass
-        #         else:
-        #             cur_idx = (slice(None), slice(None), slice(cur_start, cur_end)) if args.use_prefix_tune_for_e_prompt else (slice(None), slice(cur_start, cur_end))
-        #             prev_idx = (slice(None), slice(None), slice(prev_start, prev_end)) if args.use_prefix_tune_for_e_prompt else (slice(None), slice(prev_start, prev_end))
+                if (prev_end > args.size) or (cur_end > args.size):
+                    pass
+                else:
+                    cur_idx = (slice(None), slice(None), slice(cur_start, cur_end)) if args.use_prefix_tune_for_e_prompt else (slice(None), slice(cur_start, cur_end))
+                    prev_idx = (slice(None), slice(None), slice(prev_start, prev_end)) if args.use_prefix_tune_for_e_prompt else (slice(None), slice(prev_start, prev_end))
 
-        #             with torch.no_grad():
-        #                 model.e_prompt.grad.zero_()
-        #                 model.e_prompt[cur_idx] = model.e_prompt[prev_idx]
-        #                 optimizer.param_groups[0]['params'] = model.parameters()
+                    with torch.no_grad():
+                        model.e_prompt.grad.zero_()
+                        model.e_prompt[cur_idx] = model.e_prompt[prev_idx]
+                        optimizer.param_groups[0]['params'] = model.parameters()
         
      
         # Create new optimizer for each task to clear optimizer status
@@ -632,7 +634,82 @@ def train_and_evaluate_new(model: torch.nn.Module, original_model: torch.nn.Modu
             if lr_scheduler:
                 lr_scheduler.step(epoch)
         train_task_model(task_model=task_model, device=device, gm_list=gm_list, epochs=90, task_id=task_id)
+        
+        #ags-cl cal omega
 
+        temp = utils.gs_cal(task_id, data_loader[task_id]['train'], model, device)
+        for n in temp.keys():
+            if task_id>0:
+                omega[n] = args.eta * omega[n] + temp[n]
+            else:
+                omega = temp
+            mask[n] = (omega[n]>0).float()
+
+        ##########################################################################
+
+        #ags-cl Re-initializations
+        dummy = create_model(
+        args.model,
+        pretrained=args.pretrained,
+        num_classes=args.nb_classes,
+        drop_rate=args.drop,
+        drop_path_rate=args.drop_path,
+        drop_block_rate=None,
+        prompt_length=args.length,
+        embedding_key=args.embedding_key,
+        prompt_init=args.prompt_key_init,
+        prompt_pool=args.prompt_pool,
+        prompt_key=args.prompt_key,
+        pool_size=args.size,
+        top_k=args.top_k,
+        batchwise_prompt=args.batchwise_prompt,
+        prompt_key_init=args.prompt_key_init,
+        head_type=args.head_type,
+        use_prompt_mask=args.use_prompt_mask,
+        use_g_prompt=args.use_g_prompt,
+        g_prompt_length=args.g_prompt_length,
+        g_prompt_layer_idx=args.g_prompt_layer_idx,
+        use_prefix_tune_for_g_prompt=args.use_prefix_tune_for_g_prompt,
+        use_e_prompt=args.use_e_prompt,
+        e_prompt_layer_idx=args.e_prompt_layer_idx,
+        use_prefix_tune_for_e_prompt=args.use_prefix_tune_for_e_prompt,
+        same_key_value=args.same_key_value,
+        )
+
+        pre_name = 0
+
+        for (name,dummy_layer),(name_model,layer) in zip(dummy.named_children(), model.named_children()):
+            with torch.no_grad():
+                if isinstance(layer, nn.Linear) and ('ln' or 'last') in name_model:
+                    if pre_name!=0:
+                        temp = (omega[pre_name]>0).float()
+                        temp = temp.unsqueeze(0)
+                        layer.weight *= temp
+                            
+                    weight = layer.weight.data
+                    bias = layer.bias.data
+                    
+                    norm = weight.norm(2,dim=(1))
+                    mask = (omega[name]==0).float().unsqueeze(-1)
+
+                    zero_cnt = int((mask.sum()).item())
+                    indice = np.random.choice(range(zero_cnt), int(zero_cnt*(1-args.rho)), replace=False)
+                    indice = torch.tensor(indice).long()
+                    idx = torch.arange(weight.shape[0])[mask.flatten(0)==1][indice]
+                    mask[idx] = 0
+
+                    layer.weight.data = (1-mask)*layer.weight.data + mask*dummy_layer.weight.data
+                    mask = mask.squeeze()
+                    layer.bias.data = (1-mask)*bias + mask*dummy_layer.bias.data
+
+                    pre_name = name
+
+                # if isinstance(layer, nn.ModuleList):
+                    
+                #     weight = layer[t].weight
+                #     weight[:, omega[pre_name] == 0] = 0
+
+        #################################################################################################
         test_stat = evaluate_till_now_new(model=model, original_model=original_model, task_model=task_model, data_loader=data_loader, device=device,
                                         task_id=task_id, class_mask=class_mask, acc_matrix=acc_matrix, args=args,)
         
@@ -660,22 +737,22 @@ def train_and_evaluate_new(model: torch.nn.Module, original_model: torch.nn.Modu
                 f.write(json.dumps(log_stats) + '\n')
         
         # #store old model use ags-cl
-        # model_old = deepcopy(model)
-        # model_old.train()
-        # for param in model_old.parameters():
-        #     param.requires_grad = False
+        model_old = deepcopy(model)
+        model_old.train()
+        for param in model_old.parameters():
+            param.requires_grad = False
 
 
 @torch.no_grad()
 def proxy_grad_descent(model: torch.nn.Module, model_old: torch.nn.Module, task_id, args, mask, omega):
 
     lr = args.lr
-    mu = 0
-    lamb = 1
+    mu = 10
+    lamb = 400
 
     with torch.no_grad():
         for (name,module),(_,module_old) in zip(model.named_children(), model_old.named_children()):
-            if 'head' in name:
+            if isinstance(module, torch.nn.Linear) and ('ln' or 'last') in name:
                 key = name 
                 weight = module.weight
                 bias = module.bias
