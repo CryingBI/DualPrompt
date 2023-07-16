@@ -792,8 +792,8 @@ def proxy_grad_descent(model: torch.nn.Module, model_old: torch.nn.Module, task_
                     alpha = (aux / boonmo)
                     alpha[alpha!=alpha] = 1
 
-                    coeff_alpha = alpha * mask[key]
-                    coeff_beta = (1-alpha) * mask[key]
+                    coeff_alpha = alpha * mask[key].to("cuda:0")
+                    coeff_beta = (1-alpha) * mask[key].to("cuda:0")
 
 
                     if len(weight.size()) > 2:
