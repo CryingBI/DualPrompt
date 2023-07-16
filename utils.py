@@ -275,9 +275,10 @@ def gs_cal(task_id, data_loader, model, device):
                 name = name.split('.')[:-1]
                 name = '.'.join(name)
                 print(name)
-                print(model.act[cnt])
+                print(model.act[cnt].shape)
                 param_R[name] += model.act[cnt].abs().detach()*(input.shape)
-                cnt+=1 
+                cnt+=1
+                print("oke") 
 
     with torch.no_grad():
         for key in param_R.keys():
