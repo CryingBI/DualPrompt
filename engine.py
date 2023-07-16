@@ -680,7 +680,7 @@ def train_and_evaluate_new(model: torch.nn.Module, original_model: torch.nn.Modu
 
         for (name,dummy_layer),(name_model,layer) in zip(dummy.named_children(), model.named_children()):
             with torch.no_grad():
-                if isinstance(layer, nn.Linear) and ('ln' or 'last') in name_model:
+                if isinstance(layer, nn.Linear) and ('ln') in name_model:
                     if pre_name!=0:
                         temp = (omega[pre_name]>0).float()
                         temp = temp.unsqueeze(0)
@@ -693,14 +693,14 @@ def train_and_evaluate_new(model: torch.nn.Module, original_model: torch.nn.Modu
                     mask = (omega[name]==0).float().unsqueeze(-1)
 
                     zero_cnt = int((mask.sum()).item())
-                    indice = np.random.choice(range(zero_cnt), int(zero_cnt*(1-args.rho)), replace=False)
+                    indice = np.random.choice(range(zero_cnt), int(zero_cnt*(1-args.rho)), replace=False).to(device)
                     indice = torch.tensor(indice).long().to(device)
-                    idx = torch.arange(weight.shape[0])[mask.flatten(0)==1][indice].to(device)
+                    idx = (torch.arange(weight.shape[0])[mask.flatten(0)==1][indice]).to(device)
                     mask[idx] = 0
 
-                    layer.weight.data = (1-mask)*layer.weight.data + mask*dummy_layer.weight.data
+                    layer.weight.data = (1-mask)*layer.weight.data.to(device) + mask*dummy_layer.weight.data.to(device)
                     mask = mask.squeeze()
-                    layer.bias.data = (1-mask)*bias + mask*dummy_layer.bias.data
+                    layer.bias.data = (1-mask)*bias.to(device) + mask*dummy_layer.bias.data.to(device)
 
                     pre_name = name
 
