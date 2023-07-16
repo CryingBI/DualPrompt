@@ -275,6 +275,7 @@ def gs_cal(task_id, data_loader, model, device):
                 name = name.split('.')[:-1]
                 name = '.'.join(name)
                 print(name)
+                print(model.act[cnt])
                 param_R[name] += model.act[cnt].abs().detach()*(input.shape)
                 cnt+=1 
 
