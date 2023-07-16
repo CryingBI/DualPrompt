@@ -250,12 +250,11 @@ def gs_cal(task_id, data_loader, model, device):
     param_R = {}
     
     for name, param in model.named_parameters():
-        if len(param.size()) <= 1:
-            continue
-        name = name.split('.')[:-1]
-        name = '.'.join(name)
-        param = param.view(param.size(0), -1)
-        param_R['{}'.format(name)]=torch.zeros((param.size(0)))
+        if ('ln' or 'last') in name:
+            name = name.split('.')[:-1]
+            name = '.'.join(name)
+            param = param.view(param.size(0), -1)
+            param_R['{}'.format(name)]=torch.zeros((param.size(0)))
     
     # Compute
     model.train()
