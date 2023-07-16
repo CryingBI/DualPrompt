@@ -686,8 +686,8 @@ def train_and_evaluate_new(model: torch.nn.Module, original_model: torch.nn.Modu
                         temp = temp.unsqueeze(0)
                         layer.weight *= temp
                             
-                    weight = layer.weight.data
-                    bias = layer.bias.data
+                    weight = layer.weight.data.to(device)
+                    bias = layer.bias.data.to(device)
                     
                     norm = weight.norm(2,dim=(1))
                     mask = (omega[name]==0).float().unsqueeze(-1).to(device)
