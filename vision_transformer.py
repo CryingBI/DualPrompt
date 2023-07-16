@@ -505,7 +505,7 @@ class VisionTransformer(nn.Module):
         self.relu = torch.nn.ReLU()
         self.ln1 = nn.Linear(self.embed_dim, 512)
         self.ln2 = nn.Linear(512, 512)
-        self.last = nn.Linear(512, num_classes) if num_classes > 0 else nn.Identity()
+        self.ln3 = nn.Linear(512, num_classes) if num_classes > 0 else nn.Identity()
         
         if weight_init != 'skip':
             self.init_weights(weight_init)
@@ -665,8 +665,8 @@ class VisionTransformer(nn.Module):
         
         act1 = self.relu(self.ln1(x))
         act2 = self.relu(self.ln2(act1))
-        last = self.last(act2)
-        res['logits'] = last
+        act3 = self.ln3(act2)
+        res['logits'] = act3
 
         #ags-cl
         self.grads={}
@@ -676,8 +676,8 @@ class VisionTransformer(nn.Module):
             return hook
         
         if avg_act == True:
-            names = [0, 1]
-            act = [act1, act2]
+            names = [0, 1, 2]
+            act = [act1, act2, act3]
 
             self.act = []
             for i in act:
