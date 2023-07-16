@@ -255,7 +255,7 @@ def gs_cal(task_id, data_loader, model, device):
             name = '.'.join(name)
             param = param.view(param.size(0), -1)
             param_R['{}'.format(name)]=torch.zeros((param.size(0)))
-    
+    print(param_R)
     # Compute
     model.train()
 
