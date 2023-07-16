@@ -768,7 +768,7 @@ def proxy_grad_descent(model: torch.nn.Module, model_old: torch.nn.Module, task_
 
                 aux = F.threshold(norm - mu * lr, 0, 0, False)
                 alpha = aux/(aux+mu*lr)
-                coeff = alpha * (1-mask[key])
+                coeff = alpha * (1-mask[key]).to("cuda:0")
 
                 if len(weight.size()) > 2:
                     sparse_weight = weight.data * coeff.unsqueeze(-1).unsqueeze(-1).unsqueeze(-1) 
