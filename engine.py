@@ -695,7 +695,8 @@ def train_and_evaluate_new(model: torch.nn.Module, original_model: torch.nn.Modu
                     zero_cnt = int((mask.sum()).item())
                     indice = np.random.choice(range(zero_cnt), int(zero_cnt*(1-args.rho)), replace=False)
                     indice = torch.tensor(indice).long().to(device)
-                    idx = (torch.arange(weight.shape[0].to(device))[(mask.flatten(0)==1)][indice]).to(device)
+                    arrange = torch.arange(weight.shape[0]).to(device)
+                    idx = arrange[(mask.flatten(0)==1)][indice].to(device)
                     mask[idx] = 0
 
                     layer.weight.data = (1-mask)*layer.weight.data.to(device) + mask*dummy_layer.weight.data.to(device)
