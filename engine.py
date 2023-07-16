@@ -584,20 +584,20 @@ def train_and_evaluate_new(model: torch.nn.Module, original_model: torch.nn.Modu
         #ags-cl
         if task_id > 0:
             freeze = {}
-            omega = None
             for name, param in model.named_parameters():
-                if ('ln' or 'last') in name:
+                if 'ln' in name:
+                    if 'bias' in name:
+                        continue
                     key = name.split('.')[0]
-                    
-                    temp = torch.ones_like(param)
-                    temp = temp.reshape((temp.size(0), omega[prekey].size(0) , -1))
-                    temp[:, omega[prekey] == 0] = 0
-                    temp[omega[key] == 0] = 1
-                    freeze[key] = temp.reshape(param.shape)
-                else:
-                    continue
 
-                prekey = key
+                    if 'ln1' not in name:
+                        temp = torch.ones_like(param)
+                        temp = temp.reshape((temp.size(0), omega[prekey].size(0) , -1))
+                        temp[:, omega[prekey] == 0] = 0
+                        temp[omega[key] == 0] = 1
+                        freeze[key] = temp.reshape(param.shape)
+                        
+                    prekey = key
         # # Transfer previous learned prompt params to the new prompt
         # if args.prompt_pool and args.shared_prompt_pool:
         #     if task_id > 0:
