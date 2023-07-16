@@ -96,7 +96,7 @@ def main(args):
     mask = {}
     omega = None 
     for (name, p) in model.named_parameters():
-        if 'head' in name:
+        if ('ln' or 'last') in name:
             name = name.split('.')[:-1]
             name = '.'.join(name)
             mask[name] = torch.zeros(p.shape[0])
