@@ -274,7 +274,7 @@ def gs_cal(task_id, data_loader, model, device):
             if ('ln' or 'last') in name and len(param.size()) > 1:
                 name = name.split('.')[:-1]
                 name = '.'.join(name)
-                param_R[name] += model.act[cnt].abs().detach().to(device)*input.shape[0]
+                param_R[name] += model.act[cnt].abs().detach().to("cuda:0")*input.shape[0]
                 cnt+=1
                 print("oke") 
 
