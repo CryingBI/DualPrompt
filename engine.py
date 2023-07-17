@@ -405,7 +405,7 @@ def train_simple_model(model: torch.nn.Module, model_old: torch.nn.Module,
         #ags-cl
         if task_id > 0:
             for (name, param) in model.named_parameters():
-                if 'ln' in name:
+                if 'ln' in name and 'bias' not in name:
                     key = name.split('.')[0]
                     param.data = param.data*freeze[key]
     #ags-cl        
