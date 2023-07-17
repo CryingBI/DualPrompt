@@ -596,6 +596,7 @@ def train_and_evaluate_new(model: torch.nn.Module, original_model: torch.nn.Modu
                         freeze[key] = temp.reshape(param.shape)
                         
                     prekey = key
+            print("freeze_keys",freeze.keys())
         else:
             freeze = {}
         # Transfer previous learned prompt params to the new prompt
