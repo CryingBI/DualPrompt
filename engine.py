@@ -627,7 +627,7 @@ def train_and_evaluate_new(model: torch.nn.Module, original_model: torch.nn.Modu
             
             train_simple_stat = train_simple_model(model=model, criterion=criterion, model_old=model_old,
                                             data_loader=data_loader[task_id]['train'], optimizer=optimizer,
-                                            device=device, epoch=epoch, args=args, mask=mask, omega=omega, freeze=freeze 
+                                            device=device, epoch=epoch, args=args, mask=mask, omega=omega, freeze=freeze,
                                             max_norm = args.clip_grad, set_training_mode=True, task_id=task_id)
             if lr_scheduler:
                 lr_scheduler.step(epoch)
