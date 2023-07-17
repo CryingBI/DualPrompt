@@ -359,10 +359,8 @@ def train_task_model(task_model: torch.nn.Module, device, gm_list, epochs, task_
 
 def train_simple_model(model: torch.nn.Module, model_old: torch.nn.Module,
                     criterion, data_loader: Iterable, optimizer: torch.optim.Optimizer,
-                    device: torch.device, epoch: int, args, mask, omega, max_norm: float = 0,
+                    device: torch.device, epoch: int, args, mask, omega, freeze, max_norm: float = 0,
                     set_training_mode=True, task_id=-1, ):
-    
-    freeze = {}
 
     model.train(set_training_mode)
 
@@ -629,7 +627,7 @@ def train_and_evaluate_new(model: torch.nn.Module, original_model: torch.nn.Modu
             
             train_simple_stat = train_simple_model(model=model, criterion=criterion, model_old=model_old,
                                             data_loader=data_loader[task_id]['train'], optimizer=optimizer,
-                                            device=device, epoch=epoch, args=args, mask=mask, omega=omega, 
+                                            device=device, epoch=epoch, args=args, mask=mask, omega=omega, freeze=freeze 
                                             max_norm = args.clip_grad, set_training_mode=True, task_id=task_id)
             if lr_scheduler:
                 lr_scheduler.step(epoch)
