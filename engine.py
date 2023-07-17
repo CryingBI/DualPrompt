@@ -743,8 +743,8 @@ def train_and_evaluate_new(model: torch.nn.Module, original_model: torch.nn.Modu
         for param in model_old.parameters():
             param.requires_grad = False
 
-        print("mask_key", mask.key())
-        print("omega_key", omega.key())
+        print("mask_key", mask.keys())
+        print("omega_key", omega.keys())
 @torch.no_grad()
 def proxy_grad_descent(model: torch.nn.Module, model_old: torch.nn.Module, task_id, args, mask, omega):
 
