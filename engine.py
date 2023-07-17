@@ -690,18 +690,18 @@ def train_and_evaluate_new(model: torch.nn.Module, original_model: torch.nn.Modu
                     bias = layer.bias.data.to(device)
                     
                     norm = weight.norm(2,dim=(1))
-                    mask = (omega[name]==0).float().unsqueeze(-1).to(device)
+                    mask_2 = (omega[name]==0).float().unsqueeze(-1).to(device)
 
-                    zero_cnt = int((mask.sum()).item())
+                    zero_cnt = int((mask_2.sum()).item())
                     indice = np.random.choice(range(zero_cnt), int(zero_cnt*(1-args.rho)), replace=False)
                     indice = torch.tensor(indice).long().to(device)
                     arrange = torch.arange(weight.shape[0]).to(device)
-                    idx = arrange[(mask.flatten(0)==1)][indice].to(device)
-                    mask[idx] = 0
+                    idx = arrange[(mask_2.flatten(0)==1)][indice].to(device)
+                    mask_2[idx] = 0
 
-                    layer.weight.data = (1-mask)*layer.weight.data.to(device) + mask*dummy_layer.weight.data.to(device)
-                    mask = mask.squeeze().to(device)
-                    layer.bias.data = (1-mask)*bias.to(device) + mask*dummy_layer.bias.data.to(device)
+                    layer.weight.data = (1-mask_2)*layer.weight.data.to(device) + mask_2*dummy_layer.weight.data.to(device)
+                    mask_2 = mask_2.squeeze().to(device)
+                    layer.bias.data = (1-mask_2)*bias.to(device) + mask_2*dummy_layer.bias.data.to(device)
 
                     pre_name = name
 
