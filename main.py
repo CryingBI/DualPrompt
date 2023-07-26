@@ -92,14 +92,6 @@ def main(args):
     task_model.to(device)  
 
     gm_list = []
-    model_old = model
-    mask = {}
-    omega = None 
-    for (name, p) in model.named_parameters():
-        if ('ln' or 'last') in name:
-            name = name.split('.')[:-1]
-            name = '.'.join(name)
-            mask[name] = torch.zeros(p.shape[0])
 
     if args.freeze:
         # all parameters are frozen for original vit model
@@ -130,11 +122,6 @@ def main(args):
         
         return
 
-    # model_without_ddp = model
-    # if args.distributed:
-    #     model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu])
-    #     model_without_ddp = model.module
-    
     n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print('number of params:', n_parameters)
 
@@ -156,9 +143,9 @@ def main(args):
     print(f"Start training for {args.epochs} epochs")
     start_time = time.time()
 
-    train_and_evaluate_new(model, original_model, task_model, model_old,
+    train_and_evaluate_new(model, original_model, task_model,
                     criterion, data_loader, dataloader_each_class, optimizer, lr_scheduler, gm_list,
-                    device, class_mask, args, mask, omega)
+                    device, class_mask, args,)
 
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))

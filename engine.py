@@ -561,9 +561,9 @@ def evaluate_till_now_new(model: torch.nn.Module, original_model: torch.nn.Modul
     print(result_str)
 
     return test_stats
-def train_and_evaluate_new(model: torch.nn.Module, original_model: torch.nn.Module, task_model, model_old: torch.nn.Module, 
+def train_and_evaluate_new(model: torch.nn.Module, original_model: torch.nn.Module, task_model,
                     criterion, data_loader: Iterable, dataloader_each_class: Iterable, optimizer: torch.optim.Optimizer, lr_scheduler, gm_list, device: torch.device, 
-                    class_mask, args, mask, omega,):
+                    class_mask, args):
 
     # create matrix to save end-of-task accuracies 
     acc_matrix = np.zeros((args.num_tasks, args.num_tasks))
@@ -599,7 +599,7 @@ def train_and_evaluate_new(model: torch.nn.Module, original_model: torch.nn.Modu
 
         for epoch in range(args.epochs):
             
-            train_simple_stat = train_simple_model(model=model, criterion=criterion, model_old=model_old,
+            train_simple_stat = train_simple_model(model=model, criterion=criterion,
                                             data_loader=data_loader[task_id]['train'], optimizer=optimizer,
                                             device=device, epoch=epoch, args=args,
                                             max_norm = args.clip_grad, set_training_mode=True, task_id=task_id)
