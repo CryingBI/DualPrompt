@@ -500,12 +500,12 @@ class VisionTransformer(nn.Module):
         #     nn.Linear(512, 512),
         #     nn.ReLU(), 
         #     nn.Linear(512, num_classes) if num_classes > 0 else nn.Identity())
-        # self.head = nn.Linear(self.embed_dim, num_classes) if num_classes > 0 else nn.Identity()
+        self.head = nn.Linear(self.embed_dim, num_classes) if num_classes > 0 else nn.Identity()
 
-        self.relu = torch.nn.ReLU()
-        self.ln1 = nn.Linear(self.embed_dim, 512)
-        #self.ln2 = nn.Linear(512, 512)
-        self.ln3 = nn.Linear(512, num_classes) if num_classes > 0 else nn.Identity()
+        # self.relu = torch.nn.ReLU()
+        # self.ln1 = nn.Linear(self.embed_dim, 512)
+        # #self.ln2 = nn.Linear(512, 512)
+        # self.ln3 = nn.Linear(512, num_classes) if num_classes > 0 else nn.Identity()
         
         if weight_init != 'skip':
             self.init_weights(weight_init)
