@@ -663,27 +663,31 @@ class VisionTransformer(nn.Module):
 
         x = self.fc_norm(x)
         
-        act1 = self.relu(self.ln1(x))
-        #act2 = self.relu(self.ln2(act1))
-        act2 = self.ln3(act1)
-        res['logits'] = act2
+        res['logits'] = self.head(x)
 
-        #ags-cl
-        self.grads={}
-        def save_grad(name):
-            def hook(grad):
-                self.grads[name] = grad
-            return hook
+        # ags-cl
+        # act1 = self.relu(self.ln1(x))
+        # #act2 = self.relu(self.ln2(act1))
+        # act2 = self.ln3(act1)
+        # res['logits'] = act2
+
         
-        if avg_act == True:
-            names = [0, 1]
-            act = [act1, act2]
+        # #ags-cl
+        # self.grads={}
+        # def save_grad(name):
+        #     def hook(grad):
+        #         self.grads[name] = grad
+        #     return hook
+        
+        # if avg_act == True:
+        #     names = [0, 1]
+        #     act = [act1, act2]
 
-            self.act = []
-            for i in act:
-                self.act.append(i.detach())
-            for idx, name in enumerate(names):
-                act[idx].register_hook(save_grad(name))
+        #     self.act = []
+        #     for i in act:
+        #         self.act.append(i.detach())
+        #     for idx, name in enumerate(names):
+        #         act[idx].register_hook(save_grad(name))
         return res
 
     def forward(self, x, task_infer, avg_act = False ,task_id=-1, train=False):
