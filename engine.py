@@ -357,9 +357,9 @@ def train_task_model(task_model: torch.nn.Module, device, gm_list, epochs, task_
     for e_id in range(epochs):
         train_data(data_loader_data[e_id], scheduler, e_id)
 
-def train_simple_model(model: torch.nn.Module, model_old: torch.nn.Module,
+def train_simple_model(model: torch.nn.Module,
                     criterion, data_loader: Iterable, optimizer: torch.optim.Optimizer,
-                    device: torch.device, epoch: int, args, mask, omega, freeze, max_norm: float = 0,
+                    device: torch.device, epoch: int, args, max_norm: float = 0,
                     set_training_mode=True, task_id=-1, ):
 
     model.train(set_training_mode)
@@ -400,17 +400,6 @@ def train_simple_model(model: torch.nn.Module, model_old: torch.nn.Module,
         metric_logger.meters['Acc@1'].update(acc1.item(), n=input.shape[0])
         metric_logger.meters['Acc@5'].update(acc5.item(), n=input.shape[0])
 
-        #ags-cl
-        if args.use_ags_cl:
-            if task_id > 0:
-                for (name, param) in model.named_parameters():
-                    if 'ln' in name and 'bias' not in name and 'ln1' not in name:
-                        key = name.split('.')[0]
-                        param.data = param.data*freeze[key]
-    #ags-cl
-    if args.use_ags_cl:        
-        proxy_grad_descent(model, model_old, task_id, args, mask, omega)
-        
     # gather the stats from all processes
     metric_logger.synchronize_between_processes()
     print("Averaged stats:", metric_logger)
@@ -447,7 +436,7 @@ def sample_data(original_model: torch.nn.Module, dataloader_each_class, gm_list,
 
 @torch.no_grad()
 def evaluate_task_model(original_model: torch.nn.Module, task_model: torch.nn.Module, data_loader, 
-            device, task_id=-1, class_mask=None, args=None,):
+            device, task_id=-1,  args=None,):
     
     #criterion = torch.nn.CrossEntropyLoss()
 
@@ -581,29 +570,6 @@ def train_and_evaluate_new(model: torch.nn.Module, original_model: torch.nn.Modu
 
     for task_id in range(args.num_tasks):
 
-        if args.use_ags_cl:
-        #ags-cl
-            if task_id > 0:
-                freeze = {}
-                for name, param in model.named_parameters():
-                    if 'ln' in name:
-                        if 'bias' in name:
-                            continue
-                        key = name.split('.')[0]
-
-                        if 'ln1' not in name:
-                            temp = torch.ones_like(param)
-                            temp = temp.reshape((temp.size(0), omega[prekey].size(0) , -1))
-                            temp[:, omega[prekey] == 0] = 0
-                            temp[omega[key] == 0] = 1
-                            freeze[key] = temp.reshape(param.shape)
-                            
-                        prekey = key
-                print("freeze_keys",freeze.keys())
-            else:
-                freeze = {}
-        else:
-            freeze = {}
         # Transfer previous learned prompt params to the new prompt
         if args.prompt_pool and args.shared_prompt_pool:
             if task_id > 0:
@@ -635,87 +601,13 @@ def train_and_evaluate_new(model: torch.nn.Module, original_model: torch.nn.Modu
             
             train_simple_stat = train_simple_model(model=model, criterion=criterion, model_old=model_old,
                                             data_loader=data_loader[task_id]['train'], optimizer=optimizer,
-                                            device=device, epoch=epoch, args=args, mask=mask, omega=omega, freeze=freeze,
+                                            device=device, epoch=epoch, args=args,
                                             max_norm = args.clip_grad, set_training_mode=True, task_id=task_id)
             if lr_scheduler:
                 lr_scheduler.step(epoch)
         train_task_model(task_model=task_model, device=device, gm_list=gm_list, epochs=90, task_id=task_id)
-        
-        #ags-cl cal omega
-        if args.use_ags_cl:
-            temp = utils.gs_cal(task_id, data_loader[task_id]['train'], model, device)
-            for n in temp.keys():
-                if task_id>0:
-                    omega[n] = args.eta * omega[n] + temp[n]
-                else:
-                    omega = temp
-                mask[n] = (omega[n]>0).float()
 
         ##########################################################################
-
-        #ags-cl Re-initializations
-        if args.use_ags_cl:
-            dummy = create_model(
-            args.model,
-            pretrained=args.pretrained,
-            num_classes=args.nb_classes,
-            drop_rate=args.drop,
-            drop_path_rate=args.drop_path,
-            drop_block_rate=None,
-            prompt_length=args.length,
-            embedding_key=args.embedding_key,
-            prompt_init=args.prompt_key_init,
-            prompt_pool=args.prompt_pool,
-            prompt_key=args.prompt_key,
-            pool_size=args.size,
-            top_k=args.top_k,
-            batchwise_prompt=args.batchwise_prompt,
-            prompt_key_init=args.prompt_key_init,
-            head_type=args.head_type,
-            use_prompt_mask=args.use_prompt_mask,
-            use_g_prompt=args.use_g_prompt,
-            g_prompt_length=args.g_prompt_length,
-            g_prompt_layer_idx=args.g_prompt_layer_idx,
-            use_prefix_tune_for_g_prompt=args.use_prefix_tune_for_g_prompt,
-            use_e_prompt=args.use_e_prompt,
-            e_prompt_layer_idx=args.e_prompt_layer_idx,
-            use_prefix_tune_for_e_prompt=args.use_prefix_tune_for_e_prompt,
-            same_key_value=args.same_key_value,
-            )
-
-            pre_name = 0
-
-            for (name,dummy_layer),(name_model,layer) in zip(dummy.named_children(), model.named_children()):
-                with torch.no_grad():
-                    if isinstance(layer, nn.Linear) and ('ln') in name_model:
-                        if pre_name!=0:
-                            temp = (omega[pre_name]>0).float()
-                            temp = temp.unsqueeze(0)
-                            layer.weight *= temp
-                                
-                        weight = layer.weight.data.to(device)
-                        bias = layer.bias.data.to(device)
-                        
-                        norm = weight.norm(2,dim=(1))
-                        mask_2 = (omega[name]==0).float().unsqueeze(-1).to(device)
-
-                        zero_cnt = int((mask_2.sum()).item())
-                        indice = np.random.choice(range(zero_cnt), int(zero_cnt*(1-args.rho)), replace=False)
-                        indice = torch.tensor(indice).long().to(device)
-                        arrange = torch.arange(weight.shape[0]).to(device)
-                        idx = arrange[(mask_2.flatten(0)==1)][indice].to(device)
-                        mask_2[idx] = 0
-
-                        layer.weight.data = (1-mask_2)*layer.weight.data.to(device) + mask_2*dummy_layer.weight.data.to(device)
-                        mask_2 = mask_2.squeeze().to(device)
-                        layer.bias.data = (1-mask_2)*bias.to(device) + mask_2*dummy_layer.bias.data.to(device)
-
-                        pre_name = name
-
-                # if isinstance(layer, nn.ModuleList):
-                    
-                #     weight = layer[t].weight
-                #     weight[:, omega[pre_name] == 0] = 0
 
         #################################################################################################
         test_stat = evaluate_till_now_new(model=model, original_model=original_model, task_model=task_model, data_loader=data_loader, device=device,
@@ -744,12 +636,6 @@ def train_and_evaluate_new(model: torch.nn.Module, original_model: torch.nn.Modu
             with open(os.path.join(args.output_dir, '{}_stats.txt'.format(datetime.datetime.now().strftime('log_%Y_%m_%d_%H_%M'))), 'a') as f:
                 f.write(json.dumps(log_stats) + '\n')
         
-        # #store old model use ags-cl
-        if args.use_ags_cl:
-            model_old = deepcopy(model)
-            model_old.train()
-            for param in model_old.parameters():
-                param.requires_grad = False
 
 @torch.no_grad()
 def proxy_grad_descent(model: torch.nn.Module, model_old: torch.nn.Module, task_id, args, mask, omega):
