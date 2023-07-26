@@ -502,11 +502,6 @@ class VisionTransformer(nn.Module):
         #     nn.Linear(512, num_classes) if num_classes > 0 else nn.Identity())
         self.head = nn.Linear(self.embed_dim, num_classes) if num_classes > 0 else nn.Identity()
 
-        # self.relu = torch.nn.ReLU()
-        # self.ln1 = nn.Linear(self.embed_dim, 512)
-        # #self.ln2 = nn.Linear(512, 512)
-        # self.ln3 = nn.Linear(512, num_classes) if num_classes > 0 else nn.Identity()
-        
         if weight_init != 'skip':
             self.init_weights(weight_init)
 
@@ -641,7 +636,7 @@ class VisionTransformer(nn.Module):
 
         return res
 
-    def forward_head(self, res, avg_act, pre_logits: bool = False):
+    def forward_head(self, res, pre_logits: bool = False):
         x = res['x']
         if self.class_token and self.head_type == 'token':
             if self.prompt_pool:
@@ -665,34 +660,11 @@ class VisionTransformer(nn.Module):
         
         res['logits'] = self.head(x)
 
-        # ags-cl
-        # act1 = self.relu(self.ln1(x))
-        # #act2 = self.relu(self.ln2(act1))
-        # act2 = self.ln3(act1)
-        # res['logits'] = act2
-
-        
-        # #ags-cl
-        # self.grads={}
-        # def save_grad(name):
-        #     def hook(grad):
-        #         self.grads[name] = grad
-        #     return hook
-        
-        # if avg_act == True:
-        #     names = [0, 1]
-        #     act = [act1, act2]
-
-        #     self.act = []
-        #     for i in act:
-        #         self.act.append(i.detach())
-        #     for idx, name in enumerate(names):
-        #         act[idx].register_hook(save_grad(name))
         return res
 
-    def forward(self, x, task_infer, avg_act = False ,task_id=-1, train=False):
+    def forward(self, x, task_infer, task_id=-1, train=False):
         res = self.forward_features(x, task_infer=task_infer, task_id=task_id, train=train)
-        res = self.forward_head(res, avg_act)
+        res = self.forward_head(res)
         return res
 
 

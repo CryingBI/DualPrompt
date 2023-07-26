@@ -380,8 +380,6 @@ def train_simple_model(model: torch.nn.Module,
         logits = output['logits']
 
         loss = criterion(logits, target) # base criterion (CrossEntropyLoss)
-        # if args.pull_constraint and 'reduce_sim' in output:
-        #     loss = loss - args.pull_constraint_coeff * output['reduce_sim']
 
         acc1, acc5 = accuracy(logits, target, topk=(1, 5))
 
@@ -436,7 +434,7 @@ def sample_data(original_model: torch.nn.Module, dataloader_each_class, gm_list,
 
 @torch.no_grad()
 def evaluate_task_model(original_model: torch.nn.Module, task_model: torch.nn.Module, data_loader, 
-            device, task_id=-1,  args=None,):
+            device, task_id=-1, class_mask=None, args=None,):
     
     #criterion = torch.nn.CrossEntropyLoss()
 
@@ -563,7 +561,7 @@ def evaluate_till_now_new(model: torch.nn.Module, original_model: torch.nn.Modul
     return test_stats
 def train_and_evaluate_new(model: torch.nn.Module, original_model: torch.nn.Module, task_model,
                     criterion, data_loader: Iterable, dataloader_each_class: Iterable, optimizer: torch.optim.Optimizer, lr_scheduler, gm_list, device: torch.device, 
-                    class_mask, args):
+                    class_mask, args,):
 
     # create matrix to save end-of-task accuracies 
     acc_matrix = np.zeros((args.num_tasks, args.num_tasks))
