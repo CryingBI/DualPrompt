@@ -401,13 +401,15 @@ def train_simple_model(model: torch.nn.Module, model_old: torch.nn.Module,
         metric_logger.meters['Acc@5'].update(acc5.item(), n=input.shape[0])
 
         #ags-cl
-        if task_id > 0:
-            for (name, param) in model.named_parameters():
-                if 'ln' in name and 'bias' not in name and 'ln1' not in name:
-                    key = name.split('.')[0]
-                    param.data = param.data*freeze[key]
-    #ags-cl        
-    proxy_grad_descent(model, model_old, task_id, args, mask, omega)
+        if args.use_ags_cl:
+            if task_id > 0:
+                for (name, param) in model.named_parameters():
+                    if 'ln' in name and 'bias' not in name and 'ln1' not in name:
+                        key = name.split('.')[0]
+                        param.data = param.data*freeze[key]
+    #ags-cl
+    if args.use_ags_cl:        
+        proxy_grad_descent(model, model_old, task_id, args, mask, omega)
         
     # gather the stats from all processes
     metric_logger.synchronize_between_processes()
@@ -579,26 +581,27 @@ def train_and_evaluate_new(model: torch.nn.Module, original_model: torch.nn.Modu
 
     for task_id in range(args.num_tasks):
 
+        if args.use_ags_cl:
         #ags-cl
-        if task_id > 0:
-            freeze = {}
-            for name, param in model.named_parameters():
-                if 'ln' in name:
-                    if 'bias' in name:
-                        continue
-                    key = name.split('.')[0]
+            if task_id > 0:
+                freeze = {}
+                for name, param in model.named_parameters():
+                    if 'ln' in name:
+                        if 'bias' in name:
+                            continue
+                        key = name.split('.')[0]
 
-                    if 'ln1' not in name:
-                        temp = torch.ones_like(param)
-                        temp = temp.reshape((temp.size(0), omega[prekey].size(0) , -1))
-                        temp[:, omega[prekey] == 0] = 0
-                        temp[omega[key] == 0] = 1
-                        freeze[key] = temp.reshape(param.shape)
-                        
-                    prekey = key
-            print("freeze_keys",freeze.keys())
-        else:
-            freeze = {}
+                        if 'ln1' not in name:
+                            temp = torch.ones_like(param)
+                            temp = temp.reshape((temp.size(0), omega[prekey].size(0) , -1))
+                            temp[:, omega[prekey] == 0] = 0
+                            temp[omega[key] == 0] = 1
+                            freeze[key] = temp.reshape(param.shape)
+                            
+                        prekey = key
+                print("freeze_keys",freeze.keys())
+            else:
+                freeze = {}
         # Transfer previous learned prompt params to the new prompt
         if args.prompt_pool and args.shared_prompt_pool:
             if task_id > 0:
@@ -637,74 +640,75 @@ def train_and_evaluate_new(model: torch.nn.Module, original_model: torch.nn.Modu
         train_task_model(task_model=task_model, device=device, gm_list=gm_list, epochs=90, task_id=task_id)
         
         #ags-cl cal omega
-
-        temp = utils.gs_cal(task_id, data_loader[task_id]['train'], model, device)
-        for n in temp.keys():
-            if task_id>0:
-                omega[n] = args.eta * omega[n] + temp[n]
-            else:
-                omega = temp
-            mask[n] = (omega[n]>0).float()
+        if args.use_ags_cl:
+            temp = utils.gs_cal(task_id, data_loader[task_id]['train'], model, device)
+            for n in temp.keys():
+                if task_id>0:
+                    omega[n] = args.eta * omega[n] + temp[n]
+                else:
+                    omega = temp
+                mask[n] = (omega[n]>0).float()
 
         ##########################################################################
 
         #ags-cl Re-initializations
-        dummy = create_model(
-        args.model,
-        pretrained=args.pretrained,
-        num_classes=args.nb_classes,
-        drop_rate=args.drop,
-        drop_path_rate=args.drop_path,
-        drop_block_rate=None,
-        prompt_length=args.length,
-        embedding_key=args.embedding_key,
-        prompt_init=args.prompt_key_init,
-        prompt_pool=args.prompt_pool,
-        prompt_key=args.prompt_key,
-        pool_size=args.size,
-        top_k=args.top_k,
-        batchwise_prompt=args.batchwise_prompt,
-        prompt_key_init=args.prompt_key_init,
-        head_type=args.head_type,
-        use_prompt_mask=args.use_prompt_mask,
-        use_g_prompt=args.use_g_prompt,
-        g_prompt_length=args.g_prompt_length,
-        g_prompt_layer_idx=args.g_prompt_layer_idx,
-        use_prefix_tune_for_g_prompt=args.use_prefix_tune_for_g_prompt,
-        use_e_prompt=args.use_e_prompt,
-        e_prompt_layer_idx=args.e_prompt_layer_idx,
-        use_prefix_tune_for_e_prompt=args.use_prefix_tune_for_e_prompt,
-        same_key_value=args.same_key_value,
-        )
+        if args.use_ags_cl:
+            dummy = create_model(
+            args.model,
+            pretrained=args.pretrained,
+            num_classes=args.nb_classes,
+            drop_rate=args.drop,
+            drop_path_rate=args.drop_path,
+            drop_block_rate=None,
+            prompt_length=args.length,
+            embedding_key=args.embedding_key,
+            prompt_init=args.prompt_key_init,
+            prompt_pool=args.prompt_pool,
+            prompt_key=args.prompt_key,
+            pool_size=args.size,
+            top_k=args.top_k,
+            batchwise_prompt=args.batchwise_prompt,
+            prompt_key_init=args.prompt_key_init,
+            head_type=args.head_type,
+            use_prompt_mask=args.use_prompt_mask,
+            use_g_prompt=args.use_g_prompt,
+            g_prompt_length=args.g_prompt_length,
+            g_prompt_layer_idx=args.g_prompt_layer_idx,
+            use_prefix_tune_for_g_prompt=args.use_prefix_tune_for_g_prompt,
+            use_e_prompt=args.use_e_prompt,
+            e_prompt_layer_idx=args.e_prompt_layer_idx,
+            use_prefix_tune_for_e_prompt=args.use_prefix_tune_for_e_prompt,
+            same_key_value=args.same_key_value,
+            )
 
-        pre_name = 0
+            pre_name = 0
 
-        for (name,dummy_layer),(name_model,layer) in zip(dummy.named_children(), model.named_children()):
-            with torch.no_grad():
-                if isinstance(layer, nn.Linear) and ('ln') in name_model:
-                    if pre_name!=0:
-                        temp = (omega[pre_name]>0).float()
-                        temp = temp.unsqueeze(0)
-                        layer.weight *= temp
-                            
-                    weight = layer.weight.data.to(device)
-                    bias = layer.bias.data.to(device)
-                    
-                    norm = weight.norm(2,dim=(1))
-                    mask_2 = (omega[name]==0).float().unsqueeze(-1).to(device)
+            for (name,dummy_layer),(name_model,layer) in zip(dummy.named_children(), model.named_children()):
+                with torch.no_grad():
+                    if isinstance(layer, nn.Linear) and ('ln') in name_model:
+                        if pre_name!=0:
+                            temp = (omega[pre_name]>0).float()
+                            temp = temp.unsqueeze(0)
+                            layer.weight *= temp
+                                
+                        weight = layer.weight.data.to(device)
+                        bias = layer.bias.data.to(device)
+                        
+                        norm = weight.norm(2,dim=(1))
+                        mask_2 = (omega[name]==0).float().unsqueeze(-1).to(device)
 
-                    zero_cnt = int((mask_2.sum()).item())
-                    indice = np.random.choice(range(zero_cnt), int(zero_cnt*(1-args.rho)), replace=False)
-                    indice = torch.tensor(indice).long().to(device)
-                    arrange = torch.arange(weight.shape[0]).to(device)
-                    idx = arrange[(mask_2.flatten(0)==1)][indice].to(device)
-                    mask_2[idx] = 0
+                        zero_cnt = int((mask_2.sum()).item())
+                        indice = np.random.choice(range(zero_cnt), int(zero_cnt*(1-args.rho)), replace=False)
+                        indice = torch.tensor(indice).long().to(device)
+                        arrange = torch.arange(weight.shape[0]).to(device)
+                        idx = arrange[(mask_2.flatten(0)==1)][indice].to(device)
+                        mask_2[idx] = 0
 
-                    layer.weight.data = (1-mask_2)*layer.weight.data.to(device) + mask_2*dummy_layer.weight.data.to(device)
-                    mask_2 = mask_2.squeeze().to(device)
-                    layer.bias.data = (1-mask_2)*bias.to(device) + mask_2*dummy_layer.bias.data.to(device)
+                        layer.weight.data = (1-mask_2)*layer.weight.data.to(device) + mask_2*dummy_layer.weight.data.to(device)
+                        mask_2 = mask_2.squeeze().to(device)
+                        layer.bias.data = (1-mask_2)*bias.to(device) + mask_2*dummy_layer.bias.data.to(device)
 
-                    pre_name = name
+                        pre_name = name
 
                 # if isinstance(layer, nn.ModuleList):
                     
@@ -739,10 +743,11 @@ def train_and_evaluate_new(model: torch.nn.Module, original_model: torch.nn.Modu
                 f.write(json.dumps(log_stats) + '\n')
         
         # #store old model use ags-cl
-        model_old = deepcopy(model)
-        model_old.train()
-        for param in model_old.parameters():
-            param.requires_grad = False
+        if args.use_ags_cl:
+            model_old = deepcopy(model)
+            model_old.train()
+            for param in model_old.parameters():
+                param.requires_grad = False
 
         print("mask_key", mask.keys())
         print("omega_key", omega.keys())

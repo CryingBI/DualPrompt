@@ -115,3 +115,4 @@ def get_args_parser(subparsers):
     #ags-cl parameter
     subparsers.add_argument('--rho', type=float, default=0.3, help = 'rho')
     subparsers.add_argument('--eta', type=float, default=0.9, help = 'eta')
+    subparsers.add_argument('--use_ags_cl', type=bool, default=False)
