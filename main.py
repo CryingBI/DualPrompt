@@ -122,11 +122,6 @@ def main(args):
         
         return
 
-    # model_without_ddp = model
-    # if args.distributed:
-    #     model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu])
-    #     model_without_ddp = model.module
-    
     n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print('number of params:', n_parameters)
 
@@ -150,7 +145,7 @@ def main(args):
 
     train_and_evaluate_new(model, original_model, task_model,
                     criterion, data_loader, dataloader_each_class, optimizer, lr_scheduler, gm_list,
-                    device, class_mask, args)
+                    device, class_mask, args,)
 
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))

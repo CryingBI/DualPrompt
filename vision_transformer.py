@@ -407,6 +407,8 @@ class VisionTransformer(nn.Module):
         num_e_prompt = len(self.e_prompt_layer_idx) if self.e_prompt_layer_idx is not None else 0
         self.use_prefix_tune_for_e_prompt = use_prefix_tune_for_e_prompt
         
+
+
         if not self.use_prefix_tune_for_g_prompt and not self.use_prefix_tune_for_g_prompt:
             self.use_g_prompt = False
             self.g_prompt_layer_idx = []
@@ -657,7 +659,7 @@ class VisionTransformer(nn.Module):
         x = self.fc_norm(x)
         
         res['logits'] = self.head(x)
-        
+
         return res
 
     def forward(self, x, task_infer, task_id=-1, train=False):
@@ -778,9 +780,11 @@ def _load_weights(model: VisionTransformer, checkpoint_path: str, prefix: str = 
     model.pos_embed.copy_(pos_embed_w)
     model.norm.weight.copy_(_n2p(w[f'{prefix}Transformer/encoder_norm/scale']))
     model.norm.bias.copy_(_n2p(w[f'{prefix}Transformer/encoder_norm/bias']))
+
     if isinstance(model.head, nn.Linear) and model.head.bias.shape[0] == w[f'{prefix}head/bias'].shape[-1]:
         model.head.weight.copy_(_n2p(w[f'{prefix}head/kernel']))
         model.head.bias.copy_(_n2p(w[f'{prefix}head/bias']))
+    
     # NOTE representation layer has been removed, not used in latest 21k/1k pretrained weights
     # if isinstance(getattr(model.pre_logits, 'fc', None), nn.Linear) and f'{prefix}pre_logits/bias' in w:
     #     model.pre_logits.fc.weight.copy_(_n2p(w[f'{prefix}pre_logits/kernel']))
