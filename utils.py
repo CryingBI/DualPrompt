@@ -242,3 +242,42 @@ def init_distributed_mode(args):
                                          world_size=args.world_size, rank=args.rank)
     torch.distributed.barrier()
     setup_for_distributed(args.rank == 0)
+
+
+
+def gs_cal(task_id, data_loader, model, device):
+    # Init
+    param_R = {}
+    
+    for name, param in model.named_parameters():
+        if 'ln'in name and len(param.size()) > 1:
+            name = name.split('.')[:-1]
+            name = '.'.join(name)
+            param = param.view(param.size(0), -1)
+            param_R['{}'.format(name)]=torch.zeros((param.size(0))).to(device)
+    print(len(param_R))
+    # Compute
+    model.train()
+
+    for batch, (input, target) in enumerate(data_loader):
+        input = input.to(device, non_blocking=True)
+        #target = target.to(device, non_blocking=True)
+
+        output = model(input, avg_act = True,task_infer=None, task_id=task_id, train=True)
+        cnt = 0
+        
+        for idx, j in enumerate(model.act):
+            j = torch.mean(j, dim=0)
+            model.act[idx] = j
+            
+        for name, param in model.named_parameters():
+            if 'ln' in name and len(param.size()) > 1:
+                name = name.split('.')[:-1]
+                name = '.'.join(name)
+                param_R[name] += model.act[cnt].abs().detach().to(device)*input.shape[0]
+                cnt+=1
+
+    with torch.no_grad():
+        for key in param_R.keys():
+            param_R[key]=(param_R[key]/(len(data_loader.dataset)))
+    return param_R
